@@ -1,0 +1,77 @@
+using System.IO;
+using Nuke.Common;
+using Nuke.Common.CI;
+using Nuke.Common.Execution;
+using Nuke.Common.IO;
+using Nuke.Common.ProjectModel;
+using Nuke.Common.Tools.DotNet;
+using Nuke.Common.Utilities.Collections;
+using static Nuke.Common.Tools.DotNet.DotNetTasks;
+
+//[ShutdownDotNetAfterServerBuild]
+partial class Build : NukeBuild
+{
+    public static int Main () => Execute<Build>(x => x.Compile);
+
+    [Parameter("Configuration to build - Default is 'Debug' (local) or 'Release' (server)")]
+    readonly Configuration Configuration = IsLocalBuild ? Configuration.Debug : Configuration.Release;
+
+    [Solution] readonly Solution Solution;
+
+    AbsolutePath SourceDirectory => RootDirectory / "src";
+    AbsolutePath TestsDirectory => RootDirectory / "tests";
+    AbsolutePath OutputDirectory => RootDirectory / "output";
+
+    Target Clean => _ => _
+        .Before(Restore)
+        .Executes(() =>
+        {
+            SourceDirectory.GlobDirectories("**/bin", "**/obj")
+                .ForEach(path =>
+                {
+                    if (Directory.Exists(path))
+                        Directory.Delete(path, recursive: true);
+                });
+
+            TestsDirectory.GlobDirectories("**/bin", "**/obj")
+                .ForEach(path =>
+                {
+                    if (Directory.Exists(path))
+                        Directory.Delete(path, recursive: true);
+                });
+
+            if (Directory.Exists(OutputDirectory))
+                Directory.Delete(OutputDirectory, recursive: true);
+
+            Directory.CreateDirectory(OutputDirectory);
+        });
+
+    Target Restore => _ => _
+        .Executes(() =>
+        {
+            DotNetRestore(s => s
+                .SetProjectFile(Solution));
+        });
+
+	
+    Target Compile => _ => _
+        .DependsOn(Restore)
+        .Executes(() =>
+        {
+            DotNetBuild(s => s
+                .SetProjectFile(Solution)
+                .SetConfiguration(Configuration)
+                .EnableNoRestore());
+        });
+    
+    Target Run => _ => _
+        .DependsOn(Restore)
+        .Executes(() =>
+        {
+            DotNetRun(s => s
+                .SetProjectFile("src/MyProject")
+                .SetConfiguration(Configuration)
+                .EnableNoRestore());
+        });
+
+}
